@@ -22,7 +22,7 @@ INTERVAL = "1m"
 BOLL_PERIOD = 8
 BOLL_STD = 2
 
-LOOP_SLEEP = 2 # segundos
+LOOP_SLEEP = 5 # segundos
 last_signal = None
 
 # =========================
@@ -31,7 +31,7 @@ last_signal = None
 # =========================
 # MEXC API
 # =========================
-def get_klines(symbol, interval, limit=200):
+def get_klines(symbol, interval, limit=200, retries=3):
     url = "https://contract.mexc.com/api/v1/contract/kline"
     params = {
         "symbol": symbol,
@@ -39,14 +39,22 @@ def get_klines(symbol, interval, limit=200):
         "limit": limit
     }
 
-    r = requests.get(url, params=params, timeout=10)
-    r.raise_for_status()
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.get(url, params=params, timeout=5)
+            r.raise_for_status()
 
-    data = r.json()
-    if "data" not in data:
-        raise RuntimeError("Resposta inválida da MEXC")
+            data = r.json()
+            if "data" not in data:
+                raise RuntimeError("Resposta inválida da MEXC")
 
-    return data["data"]
+            return data["data"]
+
+        except Exception as e:
+            print(f"[WARN] MEXC tentativa {attempt}/{retries} falhou: {e}")
+            time.sleep(2)
+
+    raise RuntimeError("MEXC indisponível após múltiplas tentativas")
 
 # =========================
 # BOLLINGER BANDS
@@ -126,6 +134,5 @@ while True:
         maybe_send_report(send_telegram)
 
     except Exception as e:
-        print("[ERRO]", e)
-
-    time.sleep(LOOP_SLEEP)
+        print("[ERRO LOOP]", e)
+        time.sleep(LOOP_SLEEP)
