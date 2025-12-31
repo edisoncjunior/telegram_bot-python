@@ -4,7 +4,7 @@ import requests
 from datetime import datetime
 import pytz
 
-from statistics import (
+from trade_statistics import (
     init_statistics,
     registrar_entrada,
     verificar_resultados,
