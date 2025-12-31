@@ -4,8 +4,6 @@ import requests
 from datetime import datetime
 import pytz
 
-init_statistics()
-
 from trade_statistics import (
     init_statistics,
     registrar_entrada,
@@ -81,6 +79,7 @@ def bollinger_bands(closes, period=20, mult=2):
 # =========================
 # MAIN LOOP
 # =========================
+init_statistics()
 def main():
     log(f"🚀 Bot Bollinger 1min {SYMBOL} iniciado (Railway)")
     init_statistics()
