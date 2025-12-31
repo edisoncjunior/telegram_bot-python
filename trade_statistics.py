@@ -1,163 +1,136 @@
-﻿# statistics_v2.py
+﻿# trade_statistics.py
 import os
-import csv
+import json
 import pytz
 from datetime import datetime, timedelta
 
 # =========================
 # CONFIG
 # =========================
-TZ = pytz.timezone("America/Sao_Paulo")
+TZ_SP = pytz.timezone("America/Sao_Paulo")
+LOG_DIR = "logs"
+ENTRADAS_FILE = f"{LOG_DIR}/entradas.json"
+RESULTADOS_FILE = f"{LOG_DIR}/resultados.json"
 
-SIGNALS_LOG = "signals_log.csv"
-STATS_LOG = "stats_log.csv"
-
-TARGET_PCT = 0.02  # 2%
-REPORT_HOURS = [9, 21]
-
-# =========================
-# STATE
-# =========================
-open_trades = []
-last_report_sent = None
+META_PCT = 0.02  # 2%
+RESUMO_INTERVALO = timedelta(hours=12)
+HORA_BASE_RESUMO = 21  # 21h São Paulo
 
 # =========================
-# TIME
+# ESTADO
 # =========================
-def now_sp():
-    return datetime.now(TZ)
-
-def now_str():
-    return now_sp().strftime("%Y-%m-%d %H:%M:%S")
+entradas_abertas = []
+ultima_execucao_resumo = None
 
 # =========================
-# INIT FILES
+# TEMPO
 # =========================
-def ensure_files():
-    if not os.path.exists(SIGNALS_LOG):
-        with open(SIGNALS_LOG, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                "timestamp", "symbol", "signal",
-                "entry_price", "target_price", "status"
-            ])
+def agora_sp():
+    return datetime.now(TZ_SP)
 
-    if not os.path.exists(STATS_LOG):
-        with open(STATS_LOG, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                "entry_time", "close_time", "symbol", "signal",
-                "entry_price", "exit_price",
-                "result", "duration_sec", "pct_move"
-            ])
+def agora_str():
+    return agora_sp().strftime("%Y-%m-%d %H:%M:%S")
 
 # =========================
-# REGISTER ENTRY
+# INIT
 # =========================
-def register_entry(symbol, signal, price):
-    entry_time = now_sp()
-    target = price * (1 + TARGET_PCT) if signal == "LONG" else price * (1 - TARGET_PCT)
+def init_statistics():
+    os.makedirs(LOG_DIR, exist_ok=True)
 
-    trade = {
-        "entry_time": entry_time,
+    for f in [ENTRADAS_FILE, RESULTADOS_FILE]:
+        if not os.path.exists(f):
+            with open(f, "w", encoding="utf-8") as fp:
+                json.dump([], fp)
+
+    print("📊 Estatísticas inicializadas")
+
+# =========================
+# ENTRADAS
+# =========================
+def registrar_entrada(symbol, side, price):
+    entrada = {
+        "timestamp": agora_str(),
         "symbol": symbol,
-        "signal": signal,
-        "entry_price": price,
-        "target_price": target
+        "side": side,
+        "price": price,
+        "status": "ABERTA"
     }
-    open_trades.append(trade)
 
-    with open(SIGNALS_LOG, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            entry_time.strftime("%Y-%m-%d %H:%M:%S"),
-            symbol, signal, f"{price:.8f}", f"{target:.8f}", "OPEN"
-        ])
+    entradas_abertas.append(entrada)
+
+    with open(ENTRADAS_FILE, "r+", encoding="utf-8") as f:
+        data = json.load(f)
+        data.append(entrada)
+        f.seek(0)
+        json.dump(data, f, indent=2)
 
 # =========================
-# CHECK TARGET
+# VERIFICA RESULTADOS
 # =========================
-def check_trades(current_price, send_telegram):
-    global open_trades
+def verificar_resultados(preco_atual):
+    fechadas = []
 
-    still_open = []
+    for e in entradas_abertas:
+        entrada_preco = e["price"]
+        side = e["side"]
 
-    for t in open_trades:
-        hit = (
-            current_price >= t["target_price"]
-            if t["signal"] == "LONG"
-            else current_price <= t["target_price"]
+        alvo = (
+            entrada_preco * (1 + META_PCT)
+            if side == "LONG"
+            else entrada_preco * (1 - META_PCT)
         )
 
-        if hit:
-            close_time = now_sp()
-            duration = (close_time - t["entry_time"]).total_seconds()
-            pct = (
-                (current_price - t["entry_price"]) / t["entry_price"]
-                if t["signal"] == "LONG"
-                else (t["entry_price"] - current_price) / t["entry_price"]
-            ) * 100
+        sucesso = (
+            preco_atual >= alvo
+            if side == "LONG"
+            else preco_atual <= alvo
+        )
 
-            with open(STATS_LOG, "a", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    t["entry_time"].strftime("%Y-%m-%d %H:%M:%S"),
-                    close_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    t["symbol"], t["signal"],
-                    f"{t['entry_price']:.8f}",
-                    f"{current_price:.8f}",
-                    "SUCCESS",
-                    int(duration),
-                    f"{pct:.2f}"
-                ])
+        if sucesso:
+            e["status"] = "SUCESSO"
+            e["fechado_em"] = agora_str()
+            fechadas.append(e)
 
-            send_telegram(
-                f"✅ {t['signal']} {t['symbol']} ATINGIU META\n"
-                f"Entrada: {t['entry_price']:.8f}\n"
-                f"Saída: {current_price:.8f}\n"
-                f"Tempo: {int(duration)}s\n"
-                f"Resultado: +{pct:.2f}%"
-            )
-        else:
-            still_open.append(t)
+    if fechadas:
+        with open(RESULTADOS_FILE, "r+", encoding="utf-8") as f:
+            data = json.load(f)
+            data.extend(fechadas)
+            f.seek(0)
+            json.dump(data, f, indent=2)
 
-    open_trades = still_open
+    for f in fechadas:
+        entradas_abertas.remove(f)
 
 # =========================
-# PERIODIC REPORT
+# RESUMO 12H
 # =========================
-def maybe_send_report(send_telegram):
-    global last_report_sent
+def enviar_resumo_12h(send_telegram):
+    global ultima_execucao_resumo
 
-    now = now_sp()
-    if now.hour not in REPORT_HOURS:
+    agora = agora_sp()
+
+    if ultima_execucao_resumo:
+        if agora - ultima_execucao_resumo < RESUMO_INTERVALO:
+            return
+
+    if agora.hour != HORA_BASE_RESUMO:
         return
 
-    if last_report_sent and (now - last_report_sent) < timedelta(hours=1):
-        return
+    with open(RESULTADOS_FILE, "r", encoding="utf-8") as f:
+        dados = json.load(f)
 
-    total = success = fail = 0
+    total = len(dados)
+    sucesso = sum(1 for d in dados if d["status"] == "SUCESSO")
+    fracasso = total - sucesso
+    pct = (sucesso / total * 100) if total else 0
 
-    if os.path.exists(STATS_LOG):
-        with open(STATS_LOG, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                total += 1
-                if r["result"] == "SUCCESS":
-                    success += 1
-                else:
-                    fail += 1
-
-    if total == 0:
-        return
-
-    pct = success / total * 100
-    send_telegram(
-        f"📊 RELATÓRIO 12H\n"
-        f"Total: {total}\n"
-        f"Sucesso: {success}\n"
-        f"Fracasso: {fail}\n"
+    msg = (
+        f"📊 RESUMO 12H\n"
+        f"Entradas: {total}\n"
+        f"Sucesso: {sucesso}\n"
+        f"Fracasso: {fracasso}\n"
         f"Assertividade: {pct:.2f}%"
     )
 
-    last_report_sent = now
+    send_telegram(msg)
+    ultima_execucao_resumo = agora
