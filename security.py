@@ -2,68 +2,37 @@
 import os
 import requests
 
-# ======================================================
-# CARREGAMENTO OPCIONAL DO .env (APENAS LOCAL)
-# ======================================================
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass  # Railway injeta ENV direto no container
 
-# ======================================================
-# VARIÁVEIS DE AMBIENTE (Railway / Local)
-# ======================================================
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+def _get_env():
+    """
+    Lê variáveis de ambiente SOMENTE em runtime.
+    Funciona 100% local + Railway.
+    """
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
-# ======================================================
-#TEMPORÁRIO
-# ======================================================
-print("[ENV CHECK]")
-print("TELEGRAM_TOKEN =", TELEGRAM_TOKEN)
-print("TELEGRAM_CHAT_ID =", TELEGRAM_CHAT_ID)
-
-# ======================================================
-# VALIDAÇÃO DE STARTUP (ROBUSTEZ)
-# ======================================================
-def _assert_env():
-    missing = []
-    if not TELEGRAM_TOKEN:
-        missing.append("TELEGRAM_TOKEN")
-    if not TELEGRAM_CHAT_ID:
-        missing.append("TELEGRAM_CHAT_ID")
-
-    if missing:
+    if not token or not chat_id:
         raise RuntimeError(
-            "Variáveis de ambiente ausentes no runtime:\n"
-            + "\n".join(missing)
-            + "\n➡️ Configure estas variáveis no Service do Railway"
+            "Variáveis de ambiente obrigatórias NÃO disponíveis em runtime:\n"
+            f"TELEGRAM_TOKEN={token}\n"
+            f"TELEGRAM_CHAT_ID={chat_id}\n"
+            "➡️ Verifique o Service ativo no Railway"
         )
 
-_assert_env()
-
-# ======================================================
-def _check_telegram_env():
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        raise RuntimeError(
-            "Variáveis de ambiente do Telegram não carregadas:\n"
-            f"TELEGRAM_TOKEN={TELEGRAM_TOKEN}\n"
-            f"TELEGRAM_CHAT_ID={TELEGRAM_CHAT_ID}\n"
-            "➡️ Configure corretamente no Railway → Service → Variables"
-        )
+    return token, chat_id
 
 
-# ======================================================
-# TELEGRAM
-# ======================================================
 def send_telegram(msg: str):
-    print("[DEBUG] Tentando enviar mensagem ao Telegram...")
-    print(f"[DEBUG] CHAT_ID={TELEGRAM_CHAT_ID}")
+    """
+    Envia mensagem ao Telegram com validação tardia (safe).
+    """
+    print("[DEBUG] Preparando envio Telegram")
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    token, chat_id = _get_env()
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "text": msg
     }
 
@@ -72,5 +41,4 @@ def send_telegram(msg: str):
         print(f"[TELEGRAM] status={r.status_code}")
         print(f"[TELEGRAM] response={r.text}")
     except Exception as e:
-        print("[ERRO TELEGRAM EXCEPTION]", e)
-
+        print("[ERRO TELEGRAM]", e)
