@@ -52,7 +52,7 @@ def bollinger(closes):
 # INIT
 # =========================
 ensure_log_files()
-print("Bot Bollinger ARPAUSDT iniciado com sucesso")
+print("🚀 Bot Bollinger ARPAUSDT iniciado (Railway)")
 
 
 # =========================
@@ -73,10 +73,14 @@ while True:
         # ===== SHORT =====
         if price > upper:
             pct = (price - upper) / upper * 100
-            label = "SHORT SHORT" if pct >= 0.2 else "SHORT"
+            label = "SHORT STRONG" if pct >= 0.2 else "SHORT"
 
             if label != last_signal:
-                send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
+                try:
+                    send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
+                except Exception as e:
+                    print("[Aviso Telegram]", e)
+
                 write_signal_log(ts, SYMBOL, label, price, pct, "upper")
                 registrar_sinal("SHORT", price, closes)
                 last_signal = label
@@ -84,10 +88,14 @@ while True:
         # ===== LONG =====
         elif price < lower:
             pct = (lower - price) / lower * 100
-            label = "LONG LONG" if pct >= 0.2 else "LONG"
+            label = "LONG STRONG" if pct >= 0.2 else "LONG"
 
             if label != last_signal:
-                send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
+                try:
+                    send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
+                except Exception as e:
+                    print("[Aviso Telegram]", e)
+
                 write_signal_log(ts, SYMBOL, label, price, pct, "lower")
                 registrar_sinal("LONG", price, closes)
                 last_signal = label

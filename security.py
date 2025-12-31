@@ -3,46 +3,28 @@ import os
 import requests
 
 # ======================================================
-# CARREGAMENTO OPCIONAL DO .env (APENAS LOCAL)
+# VARIÁVEIS DE AMBIENTE (Railway / Local)
 # ======================================================
-try:
-    from dotenv import load_dotenv
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    ENV_PATH = os.path.join(BASE_DIR, ".env")
 
-    if os.path.exists(ENV_PATH):
-        load_dotenv(dotenv_path=ENV_PATH, override=True)
-except Exception:
-    # Em produção (Railway), dotenv pode não existir ou não ser necessário
-    pass
+def _check_telegram_env():
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        raise RuntimeError(
+            "Variáveis de ambiente do Telegram não carregadas:\n"
+            f"TELEGRAM_TOKEN={TELEGRAM_TOKEN}\n"
+            f"TELEGRAM_CHAT_ID={TELEGRAM_CHAT_ID}\n"
+            "➡️ Configure corretamente no Railway → Service → Variables"
+        )
 
-# ======================================================
-# VARIÁVEIS DE AMBIENTE (LOCAL + RAILWAY)
-# ======================================================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
-BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
-
-# ======================================================
-# VALIDAÇÃO
-# ======================================================
-if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-    raise RuntimeError(
-        "Variáveis de ambiente obrigatórias não carregadas:\n"
-        f"TELEGRAM_TOKEN={TELEGRAM_TOKEN}\n"
-        f"TELEGRAM_CHAT_ID={TELEGRAM_CHAT_ID}\n"
-        "➡️ Verifique:\n"
-        "- Arquivo .env (ambiente local)\n"
-        "- Variáveis configuradas no Railway (produção)"
-    )
 
 # ======================================================
 # TELEGRAM
 # ======================================================
 def send_telegram(msg: str):
+    _check_telegram_env()
+
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {
