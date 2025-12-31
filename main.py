@@ -14,6 +14,9 @@ from statistics import (
 
 from security import send_telegram
 
+send_telegram("🚀 TESTE DEFINITIVO: Telegram operacional no Railway")
+
+
 # =========================
 # CONFIGURAÇÕES
 # =========================
