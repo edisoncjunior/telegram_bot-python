@@ -14,6 +14,7 @@ from statistics import (
 
 from security import send_telegram
 
+time.sleep(10)
 send_telegram("🚀 TESTE DEFINITIVO: Telegram operacional no Railway")
 
 
