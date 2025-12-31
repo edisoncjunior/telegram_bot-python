@@ -27,35 +27,24 @@ LOOP_SLEEP = 2
 last_signal = None
 
 # =========================
-# BINANCE
+# MEXC
 # =========================
 def get_klines(symbol, interval, limit=200):
-    endpoints = [
-        "https://api.binance.com/api/v3/klines",
-        "https://data.binance.com/api/v3/klines"
-    ]
-
-    for url in endpoints:
-        try:
-            r = requests.get(
-                url,
-                params={
-                    "symbol": symbol,
-                    "interval": interval,
-                    "limit": limit
-                },
-                timeout=10,
-                headers={"User-Agent": "Mozilla/5.0"}
-            )
-            r.raise_for_status()
-            print(f"[INFO] Dados carregados via {url}")
-            return r.json()
-        except Exception as e:
-            print(f"[WARN] Falha em {url}: {e}")
-
-    raise RuntimeError("Nenhum endpoint Binance disponível")
-
-
+    url = "https://api.mexc.com/api/v3/klines"
+    r = requests.get(
+        url,
+        params={
+            "symbol": symbol,
+            "interval": interval,
+            "limit": limit
+        },
+        timeout=10,
+        headers={
+            "User-Agent": "Mozilla/5.0"
+        }
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 def bollinger(closes):
