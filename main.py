@@ -1,138 +1,148 @@
 ﻿# main.py
 import time
 import requests
-import numpy as np
-
-from security import send_telegram
+from datetime import datetime
+import pytz
 
 from statistics import (
-    ensure_files,
-    register_entry,
-    check_trades,
-    maybe_send_report
+    init_statistics,
+    registrar_entrada,
+    verificar_resultados,
+    enviar_resumo_12h
 )
 
-
 # =========================
-# CONFIGURAÇÕES GERAIS
+# CONFIGURAÇÃO GERAL
 # =========================
 SYMBOL = "ARPAUSDT"
-INTERVAL = "1m"
+INTERVAL = "Min1"
+API_URL = "https://contract.mexc.com/api/v1/contract/kline"
 
-BOLL_PERIOD = 8
-BOLL_STD = 2
+TIMEOUT = 15          # segundos
+RETRIES = 2
+SLEEP_LOOP = 60       # 1 minuto
 
-LOOP_SLEEP = 5 # segundos
-last_signal = None
+TZ_SP = pytz.timezone("America/Sao_Paulo")
 
 # =========================
-# MEXC API
+# LOG SIMPLES
 # =========================
+def log(msg):
+    ts = datetime.now(TZ_SP).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{ts} | {msg}", flush=True)
+
 # =========================
-# MEXC API
+# FETCH DADOS MEXC
 # =========================
-def get_klines(symbol, interval, limit=200, retries=3):
-    url = "https://contract.mexc.com/api/v1/contract/kline"
+def fetch_klines():
     params = {
-        "symbol": symbol,
-        "interval": interval,
-        "limit": limit
+        "symbol": SYMBOL,
+        "interval": INTERVAL,
+        "limit": 50
     }
 
-    for attempt in range(1, retries + 1):
+    for tentativa in range(1, RETRIES + 1):
         try:
-            r = requests.get(url, params=params, timeout=5)
+            r = requests.get(API_URL, params=params, timeout=TIMEOUT)
             r.raise_for_status()
-
             data = r.json()
+
             if "data" not in data:
-                raise RuntimeError("Resposta inválida da MEXC")
+                raise ValueError("Resposta inválida da MEXC")
 
             return data["data"]
 
         except Exception as e:
-            print(f"[WARN] MEXC tentativa {attempt}/{retries} falhou: {e}")
-            time.sleep(2)
+            log(f"[WARN] MEXC tentativa {tentativa}/{RETRIES} falhou: {e}")
+            time.sleep(5)
 
-    raise RuntimeError("MEXC indisponível após múltiplas tentativas")
+    log("[ERRO LOOP] MEXC indisponível após múltiplas tentativas")
+    return None
 
 # =========================
-# BOLLINGER BANDS
+# CÁLCULO BOLLINGER
 # =========================
-def bollinger(closes):
-    arr = np.array(closes)
-    sma = arr[-BOLL_PERIOD:].mean()
-    std = arr[-BOLL_PERIOD:].std()
+def bollinger_bands(closes, period=20, mult=2):
+    if len(closes) < period:
+        return None, None
 
-    upper = sma + BOLL_STD * std
-    lower = sma - BOLL_STD * std
+    slice_ = closes[-period:]
+    ma = sum(slice_) / period
+    variance = sum((x - ma) ** 2 for x in slice_) / period
+    std = variance ** 0.5
+
+    upper = ma + mult * std
+    lower = ma - mult * std
+
     return upper, lower
 
 # =========================
-# INIT
+# MAIN LOOP
 # =========================
-ensure_files()
-print("🚀 Bot Bollinger 1min ARPAUSDT iniciado (Railway)")
+def main():
+    log(f"🚀 Bot Bollinger 1min {SYMBOL} iniciado (Railway)")
+    init_statistics()
 
+    last_candle_time = None
 
-# =========================
-# LOOP PRINCIPAL
-# =========================
-while True:
-    try:
-        klines = get_klines(SYMBOL, INTERVAL)
+    while True:
+        try:
+            klines = fetch_klines()
+            if not klines:
+                time.sleep(SLEEP_LOOP)
+                continue
 
-        closes = [float(k["close"]) for k in klines]
-        price = closes[-1]
+            closes = [float(k[4]) for k in klines]
+            last_kline = klines[-1]
+            candle_time = int(last_kline[0])
 
-        upper, lower = bollinger(closes)
+            # evita processar o mesmo candle
+            if candle_time == last_candle_time:
+                time.sleep(5)
+                continue
 
-        print(
-            f"Preço: {price:.8f} | "
-            f"Upper: {upper:.8f} | "
-            f"Lower: {lower:.8f}"
-        )
+            last_candle_time = candle_time
+            price = closes[-1]
 
-        # =========================
-        # VERIFICA ALVOS ATIVOS
-        # =========================
-        check_trades(price, send_telegram)
+            upper, lower = bollinger_bands(closes)
+            if not upper or not lower:
+                time.sleep(SLEEP_LOOP)
+                continue
 
-        # =========================
-        # SHORT
-        # =========================
-        if price > upper:
-            label = "SHORT"
-            if last_signal != label:
-                send_telegram(
-                    f"🔴 SHORT {SYMBOL}\n"
-                    f"Preço: {price:.8f}\n"
-                    f"Rompimento Bollinger Superior"
+            log(f"Preço: {price:.8f} | Upper: {upper:.8f} | Lower: {lower:.8f}")
+
+            # =========================
+            # SINAIS
+            # =========================
+            if price <= lower:
+                log("📈 SINAL LONG detectado")
+                registrar_entrada(
+                    symbol=SYMBOL,
+                    signal="LONG",
+                    price=price
                 )
 
-                register_entry(SYMBOL, "SHORT", price)
-                last_signal = label
-
-        # =========================
-        # LONG
-        # =========================
-        elif price < lower:
-            label = "LONG"
-            if last_signal != label:
-                send_telegram(
-                    f"🟢 LONG {SYMBOL}\n"
-                    f"Preço: {price:.8f}\n"
-                    f"Rompimento Bollinger Inferior"
+            elif price >= upper:
+                log("📉 SINAL SHORT detectado")
+                registrar_entrada(
+                    symbol=SYMBOL,
+                    signal="SHORT",
+                    price=price
                 )
 
-                register_entry(SYMBOL, "LONG", price)
-                last_signal = label
+            # =========================
+            # VERIFICA RESULTADOS
+            # =========================
+            verificar_resultados(price)
+            enviar_resumo_12h()
 
-        # =========================
-        # RELATÓRIO 12H
-        # =========================
-        maybe_send_report(send_telegram)
+        except Exception as e:
+            log(f"[ERRO GERAL LOOP] {e}")
 
-    except Exception as e:
-        print("[ERRO LOOP]", e)
-        time.sleep(LOOP_SLEEP)
+        time.sleep(SLEEP_LOOP)
+
+# =========================
+# START
+# =========================
+if __name__ == "__main__":
+    main()
