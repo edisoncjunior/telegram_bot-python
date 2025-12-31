@@ -31,7 +31,7 @@ last_signal = None
 # =========================
 def get_klines(symbol, interval, limit=200):
     r = requests.get(
-        "https://fapi.binance.com/fapi/v1/klines",
+        "https://api.binance.com/api/v3/klines",
         params={"symbol": symbol, "interval": interval, "limit": limit},
         timeout=10
     )
