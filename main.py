@@ -3,23 +3,18 @@ import time
 import requests
 import numpy as np
 
-from statistics import (
-    ensure_log_files,
-    registrar_sinal,
-    verificar_sinais,
-    write_signal_log,
-    estat,
-    agora_sp_str
-)
-
 from security import send_telegram
 
-time.sleep(10)
-send_telegram("🚀 TESTE DEFINITIVO: Telegram operacional no Railway")
+from statistics import (
+    ensure_files,
+    register_entry,
+    check_trades,
+    maybe_send_report
+)
 
 
 # =========================
-# CONFIGURAÇÕES
+# CONFIGURAÇÕES GERAIS
 # =========================
 SYMBOL = "ARPAUSDT"
 INTERVAL = "1m"
@@ -27,44 +22,49 @@ INTERVAL = "1m"
 BOLL_PERIOD = 8
 BOLL_STD = 2
 
-LOOP_SLEEP = 2
+LOOP_SLEEP = 2 # segundos
 last_signal = None
 
 # =========================
-# MEXC
+# MEXC API
+# =========================
+# =========================
+# MEXC API
 # =========================
 def get_klines(symbol, interval, limit=200):
-    url = "https://api.mexc.com/api/v3/klines"
-    r = requests.get(
-        url,
-        params={
-            "symbol": symbol,
-            "interval": interval,
-            "limit": limit
-        },
-        timeout=10,
-        headers={
-            "User-Agent": "Mozilla/5.0"
-        }
-    )
+    url = "https://contract.mexc.com/api/v1/contract/kline"
+    params = {
+        "symbol": symbol,
+        "interval": interval,
+        "limit": limit
+    }
+
+    r = requests.get(url, params=params, timeout=10)
     r.raise_for_status()
-    return r.json()
 
+    data = r.json()
+    if "data" not in data:
+        raise RuntimeError("Resposta inválida da MEXC")
 
+    return data["data"]
+
+# =========================
+# BOLLINGER BANDS
+# =========================
 def bollinger(closes):
     arr = np.array(closes)
     sma = arr[-BOLL_PERIOD:].mean()
     std = arr[-BOLL_PERIOD:].std()
+
     upper = sma + BOLL_STD * std
     lower = sma - BOLL_STD * std
     return upper, lower
 
-
 # =========================
 # INIT
 # =========================
-ensure_log_files()
-print("🚀 Bot Bollinger ARPAUSDT iniciado (Railway)")
+ensure_files()
+print("🚀 Bot Bollinger 1min ARPAUSDT iniciado (Railway)")
 
 
 # =========================
@@ -73,52 +73,57 @@ print("🚀 Bot Bollinger ARPAUSDT iniciado (Railway)")
 while True:
     try:
         klines = get_klines(SYMBOL, INTERVAL)
-        closes = [float(k[4]) for k in klines]
+
+        closes = [float(k["close"]) for k in klines]
         price = closes[-1]
 
         upper, lower = bollinger(closes)
-        verificar_sinais(closes)
 
-        ts = agora_sp_str()
-        print(f"{ts} | Preço: {price:.8f} | Upper: {upper:.8f} | Lower: {lower:.8f}")
+        print(
+            f"Preço: {price:.8f} | "
+            f"Upper: {upper:.8f} | "
+            f"Lower: {lower:.8f}"
+        )
 
-        # ===== SHORT =====
+        # =========================
+        # VERIFICA ALVOS ATIVOS
+        # =========================
+        check_trades(price, send_telegram)
+
+        # =========================
+        # SHORT
+        # =========================
         if price > upper:
-            pct = (price - upper) / upper * 100
-            label = "SHORT STRONG" if pct >= 0.2 else "SHORT"
+            label = "SHORT"
+            if last_signal != label:
+                send_telegram(
+                    f"🔴 SHORT {SYMBOL}\n"
+                    f"Preço: {price:.8f}\n"
+                    f"Rompimento Bollinger Superior"
+                )
 
-            if label != last_signal:
-                try:
-                    send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
-                except Exception as e:
-                    print("[Aviso Telegram]", e)
-
-                write_signal_log(ts, SYMBOL, label, price, pct, "upper")
-                registrar_sinal("SHORT", price, closes)
+                register_entry(SYMBOL, "SHORT", price)
                 last_signal = label
 
-        # ===== LONG =====
+        # =========================
+        # LONG
+        # =========================
         elif price < lower:
-            pct = (lower - price) / lower * 100
-            label = "LONG STRONG" if pct >= 0.2 else "LONG"
+            label = "LONG"
+            if last_signal != label:
+                send_telegram(
+                    f"🟢 LONG {SYMBOL}\n"
+                    f"Preço: {price:.8f}\n"
+                    f"Rompimento Bollinger Inferior"
+                )
 
-            if label != last_signal:
-                try:
-                    send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
-                except Exception as e:
-                    print("[Aviso Telegram]", e)
-
-                write_signal_log(ts, SYMBOL, label, price, pct, "lower")
-                registrar_sinal("LONG", price, closes)
+                register_entry(SYMBOL, "LONG", price)
                 last_signal = label
 
-        # ===== ESTATÍSTICAS =====
-        if estat["total"] > 0:
-            print(
-                f"Total: {estat['total']} | "
-                f"Acertos 3c: {estat['acertos_3']} | "
-                f"Acertos 4c: {estat['acertos_4']}"
-            )
+        # =========================
+        # RELATÓRIO 12H
+        # =========================
+        maybe_send_report(send_telegram)
 
     except Exception as e:
         print("[ERRO]", e)

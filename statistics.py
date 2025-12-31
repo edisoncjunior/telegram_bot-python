@@ -1,96 +1,163 @@
-﻿# statistics.py
+﻿# statistics_v2.py
 import os
-import time
+import csv
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # =========================
 # CONFIG
 # =========================
-LOG_FILE = "bb_arpa_logs.txt"
-STATS_LOG_FILE = "bb_arpa_stats.txt"
+TZ = pytz.timezone("America/Sao_Paulo")
 
-TELEGRAM_SEND_STATS = True
-STATS_SEND_INTERVAL = 300
+SIGNALS_LOG = "signals_log.csv"
+STATS_LOG = "stats_log.csv"
 
-# =========================
-# ESTADO
-# =========================
-sinais = []
-estat = {
-    "total": 0,
-    "acertos_3": 0,
-    "acertos_4": 0
-}
-
-_last_stats_sent_time = 0
+TARGET_PCT = 0.02  # 2%
+REPORT_HOURS = [9, 21]
 
 # =========================
-# TEMPO
+# STATE
 # =========================
-def agora_sp():
-    return datetime.now(pytz.timezone("America/Sao_Paulo"))
-
-def agora_sp_str():
-    return agora_sp().strftime("%Y-%m-%d %H:%M:%S")
+open_trades = []
+last_report_sent = None
 
 # =========================
-# LOGS
+# TIME
 # =========================
-def ensure_log_files():
-    if not os.path.exists(LOG_FILE):
-        with open(LOG_FILE, "w", encoding="utf-8") as f:
-            f.write("timestamp\tsymbol\tsignal\tprice\trupture_percent\tmeta\n")
+def now_sp():
+    return datetime.now(TZ)
 
-    if not os.path.exists(STATS_LOG_FILE):
-        with open(STATS_LOG_FILE, "w", encoding="utf-8") as f:
-            f.write("timestamp\ttotal\tacertos_3\tacertos_4\tacertos3_pct\tacertos4_pct\n")
+def now_str():
+    return now_sp().strftime("%Y-%m-%d %H:%M:%S")
 
-def write_signal_log(ts, symbol, signal, price, percent, meta=""):
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{ts}\t{symbol}\t{signal}\t{price:.8f}\t{percent:.6f}\t{meta}\n")
+# =========================
+# INIT FILES
+# =========================
+def ensure_files():
+    if not os.path.exists(SIGNALS_LOG):
+        with open(SIGNALS_LOG, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "timestamp", "symbol", "signal",
+                "entry_price", "target_price", "status"
+            ])
 
-def write_stats_log():
-    if estat["total"] == 0:
-        return
+    if not os.path.exists(STATS_LOG):
+        with open(STATS_LOG, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "entry_time", "close_time", "symbol", "signal",
+                "entry_price", "exit_price",
+                "result", "duration_sec", "pct_move"
+            ])
 
-    ac3 = estat["acertos_3"] / estat["total"] * 100
-    ac4 = estat["acertos_4"] / estat["total"] * 100
+# =========================
+# REGISTER ENTRY
+# =========================
+def register_entry(symbol, signal, price):
+    entry_time = now_sp()
+    target = price * (1 + TARGET_PCT) if signal == "LONG" else price * (1 - TARGET_PCT)
 
-    with open(STATS_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(
-            f"{agora_sp_str()}\t{estat['total']}\t"
-            f"{estat['acertos_3']}\t{estat['acertos_4']}\t"
-            f"{ac3:.2f}\t{ac4:.2f}\n"
+    trade = {
+        "entry_time": entry_time,
+        "symbol": symbol,
+        "signal": signal,
+        "entry_price": price,
+        "target_price": target
+    }
+    open_trades.append(trade)
+
+    with open(SIGNALS_LOG, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            entry_time.strftime("%Y-%m-%d %H:%M:%S"),
+            symbol, signal, f"{price:.8f}", f"{target:.8f}", "OPEN"
+        ])
+
+# =========================
+# CHECK TARGET
+# =========================
+def check_trades(current_price, send_telegram):
+    global open_trades
+
+    still_open = []
+
+    for t in open_trades:
+        hit = (
+            current_price >= t["target_price"]
+            if t["signal"] == "LONG"
+            else current_price <= t["target_price"]
         )
 
+        if hit:
+            close_time = now_sp()
+            duration = (close_time - t["entry_time"]).total_seconds()
+            pct = (
+                (current_price - t["entry_price"]) / t["entry_price"]
+                if t["signal"] == "LONG"
+                else (t["entry_price"] - current_price) / t["entry_price"]
+            ) * 100
+
+            with open(STATS_LOG, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    t["entry_time"].strftime("%Y-%m-%d %H:%M:%S"),
+                    close_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    t["symbol"], t["signal"],
+                    f"{t['entry_price']:.8f}",
+                    f"{current_price:.8f}",
+                    "SUCCESS",
+                    int(duration),
+                    f"{pct:.2f}"
+                ])
+
+            send_telegram(
+                f"✅ {t['signal']} {t['symbol']} ATINGIU META\n"
+                f"Entrada: {t['entry_price']:.8f}\n"
+                f"Saída: {current_price:.8f}\n"
+                f"Tempo: {int(duration)}s\n"
+                f"Resultado: +{pct:.2f}%"
+            )
+        else:
+            still_open.append(t)
+
+    open_trades = still_open
+
 # =========================
-# SINAIS
+# PERIODIC REPORT
 # =========================
-def registrar_sinal(tipo, preco, closes):
-    sinais.append({
-        "tipo": tipo,
-        "preco": preco,
-        "index": len(closes) - 1,
-        "v3": False,
-        "v4": False
-    })
-    estat["total"] += 1
+def maybe_send_report(send_telegram):
+    global last_report_sent
 
-def verificar_sinais(closes):
-    for s in sinais:
-        i = s["index"]
+    now = now_sp()
+    if now.hour not in REPORT_HOURS:
+        return
 
-        if not s["v3"] and len(closes) > i + 3:
-            if (s["tipo"] == "LONG" and closes[i + 3] > s["preco"]) or \
-               (s["tipo"] == "SHORT" and closes[i + 3] < s["preco"]):
-                estat["acertos_3"] += 1
-            s["v3"] = True
+    if last_report_sent and (now - last_report_sent) < timedelta(hours=1):
+        return
 
-        if not s["v4"] and len(closes) > i + 4:
-            if (s["tipo"] == "LONG" and closes[i + 4] > s["preco"]) or \
-               (s["tipo"] == "SHORT" and closes[i + 4] < s["preco"]):
-                estat["acertos_4"] += 1
-            s["v4"] = True
+    total = success = fail = 0
 
-    sinais[:] = [s for s in sinais if not (s["v3"] and s["v4"])]
+    if os.path.exists(STATS_LOG):
+        with open(STATS_LOG, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                total += 1
+                if r["result"] == "SUCCESS":
+                    success += 1
+                else:
+                    fail += 1
+
+    if total == 0:
+        return
+
+    pct = success / total * 100
+    send_telegram(
+        f"📊 RELATÓRIO 12H\n"
+        f"Total: {total}\n"
+        f"Sucesso: {success}\n"
+        f"Fracasso: {fail}\n"
+        f"Assertividade: {pct:.2f}%"
+    )
+
+    last_report_sent = now
