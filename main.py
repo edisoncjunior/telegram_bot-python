@@ -30,13 +30,22 @@ last_signal = None
 # BINANCE
 # =========================
 def get_klines(symbol, interval, limit=200):
+    url = "https://data.binance.com/api/v3/klines"
     r = requests.get(
-        "https://api.binance.com/api/v3/klines",
-        params={"symbol": symbol, "interval": interval, "limit": limit},
-        timeout=10
+        url,
+        params={
+            "symbol": symbol,
+            "interval": interval,
+            "limit": limit
+        },
+        timeout=10,
+        headers={
+            "User-Agent": "Mozilla/5.0"
+        }
     )
     r.raise_for_status()
     return r.json()
+
 
 
 def bollinger(closes):
