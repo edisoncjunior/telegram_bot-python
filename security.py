@@ -1,21 +1,24 @@
 ﻿# security.py
 import os
 import requests
-from dotenv import load_dotenv
 
 # ======================================================
-# CARREGAMENTO EXPLÍCITO DO .env (WINDOWS SAFE)
+# CARREGAMENTO OPCIONAL DO .env (APENAS LOCAL)
 # ======================================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(BASE_DIR, ".env")
+try:
+    from dotenv import load_dotenv
 
-if not os.path.exists(ENV_PATH):
-    raise RuntimeError(f"Arquivo .env NÃO encontrado em: {ENV_PATH}")
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    ENV_PATH = os.path.join(BASE_DIR, ".env")
 
-load_dotenv(dotenv_path=ENV_PATH, override=True)
+    if os.path.exists(ENV_PATH):
+        load_dotenv(dotenv_path=ENV_PATH, override=True)
+except Exception:
+    # Em produção (Railway), dotenv pode não existir ou não ser necessário
+    pass
 
 # ======================================================
-# VARIÁVEIS DE AMBIENTE
+# VARIÁVEIS DE AMBIENTE (LOCAL + RAILWAY)
 # ======================================================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -28,9 +31,12 @@ BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 # ======================================================
 if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
     raise RuntimeError(
-        f"Variáveis não carregadas.\n"
+        "Variáveis de ambiente obrigatórias não carregadas:\n"
         f"TELEGRAM_TOKEN={TELEGRAM_TOKEN}\n"
-        f"TELEGRAM_CHAT_ID={TELEGRAM_CHAT_ID}"
+        f"TELEGRAM_CHAT_ID={TELEGRAM_CHAT_ID}\n"
+        "➡️ Verifique:\n"
+        "- Arquivo .env (ambiente local)\n"
+        "- Variáveis configuradas no Railway (produção)"
     )
 
 # ======================================================
@@ -39,7 +45,10 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
 def send_telegram(msg: str):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": msg}
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": msg
+        }
         r = requests.post(url, json=payload, timeout=10)
         print(f"[Telegram] {r.status_code} | {r.text}")
     except Exception as e:
