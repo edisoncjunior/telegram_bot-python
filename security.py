@@ -23,15 +23,19 @@ def _check_telegram_env():
 # TELEGRAM
 # ======================================================
 def send_telegram(msg: str):
-    _check_telegram_env()
+    print("[DEBUG] Tentando enviar mensagem ao Telegram...")
+    print(f"[DEBUG] CHAT_ID={TELEGRAM_CHAT_ID}")
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": msg
+    }
 
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": msg
-        }
         r = requests.post(url, json=payload, timeout=10)
-        print(f"[Telegram] {r.status_code} | {r.text}")
+        print(f"[TELEGRAM] status={r.status_code}")
+        print(f"[TELEGRAM] response={r.text}")
     except Exception as e:
-        print("[ERRO TELEGRAM]", e)
+        print("[ERRO TELEGRAM EXCEPTION]", e)
+
