@@ -1,6 +1,8 @@
 .env
 __pycache__/
 *.pyc
-*.txt
 .venv/
 .env.*
+# Logs e estatísticas do bot
+bb_arpa_logs.txt
+bb_arpa_stats.txt
