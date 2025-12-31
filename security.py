@@ -18,6 +18,13 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 # ======================================================
+#TEMPORÁRIO
+# ======================================================
+print("[ENV CHECK]")
+print("TELEGRAM_TOKEN =", TELEGRAM_TOKEN)
+print("TELEGRAM_CHAT_ID =", TELEGRAM_CHAT_ID)
+
+# ======================================================
 # VALIDAÇÃO DE STARTUP (ROBUSTEZ)
 # ======================================================
 def _assert_env():
