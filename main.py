@@ -63,8 +63,8 @@ def bollinger(closes):
 # =========================
 
 ensure_log_files()
-print("🚀 Bot Bollinger ARPAUSDT iniciado (local)")
-send_telegram("🚀 Bot Bollinger ARPAUSDT iniciado (local)")
+print("🚀 Bot Bollinger ARPAUSDT iniciado")
+send_telegram("🚀 Bot Bollinger ARPAUSDT iniciado")
 
 
 # =========================
@@ -85,7 +85,7 @@ while True:
         # ===== SHORT =====
         if price > upper:
             pct = (price - upper) / upper * 100
-            label = "SHORT STRONG local" if pct >= 0.2 else "SHORT local"
+            label = "SHORT STRONG" if pct >= 0.2 else "SHORT"
 
             if label != last_signal:
                 try:
@@ -94,13 +94,13 @@ while True:
                     print("[Aviso Telegram]", e)
 
                 write_signal_log(ts, SYMBOL, label, price, pct, "upper")
-                registrar_sinal("SHORT local", price, closes)
+                registrar_sinal("SHORT", price, closes)
                 last_signal = label
 
         # ===== LONG =====
         elif price < lower:
             pct = (lower - price) / lower * 100
-            label = "LONG STRONG local" if pct >= 0.2 else "LONG local"
+            label = "LONG STRONG" if pct >= 0.2 else "LONG"
 
             if label != last_signal:
                 try:
@@ -109,7 +109,7 @@ while True:
                     print("[Aviso Telegram]", e)
 
                 write_signal_log(ts, SYMBOL, label, price, pct, "lower")
-                registrar_sinal("LONG local", price, closes)
+                registrar_sinal("LONG", price, closes)
                 last_signal = label
 
         # ===== ESTATÍSTICAS =====
