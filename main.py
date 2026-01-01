@@ -1,149 +1,126 @@
 ﻿# main.py
+# versão estável git 998e572
 import time
 import requests
-from datetime import datetime
-import pytz
+import numpy as np
 
-from trade_statistics import (
-    init_statistics,
-    registrar_entrada,
-    verificar_resultados,
-    enviar_resumo_12h
+from statistics import (
+    ensure_log_files,
+    registrar_sinal,
+    verificar_sinais,
+    write_signal_log,
+    estat,
+    agora_sp_str
 )
 
+from security import send_telegram
+
+
 # =========================
-# CONFIGURAÇÃO GERAL
+# CONFIGURAÇÕES
 # =========================
 SYMBOL = "ARPAUSDT"
-INTERVAL = "Min1"
-API_URL = "https://contract.mexc.com/api/v1/contract/kline"
+INTERVAL = "1m"
 
-TIMEOUT = 15          # segundos
-RETRIES = 2
-SLEEP_LOOP = 60       # 1 minuto
+BOLL_PERIOD = 8
+BOLL_STD = 2
 
-TZ_SP = pytz.timezone("America/Sao_Paulo")
-
-# =========================
-# LOG SIMPLES
-# =========================
-def log(msg):
-    ts = datetime.now(TZ_SP).strftime("%Y-%m-%d %H:%M:%S")
-    print(f"{ts} | {msg}", flush=True)
+LOOP_SLEEP = 2
+last_signal = None
 
 # =========================
-# FETCH DADOS MEXC
+# MEXC
 # =========================
-def fetch_klines():
-    params = {
-        "symbol": SYMBOL,
-        "interval": INTERVAL,
-        "limit": 50
-    }
+def get_klines(symbol, interval, limit=200):
+    url = "https://api.mexc.com/api/v3/klines"
+    r = requests.get(
+        url,
+        params={
+            "symbol": symbol,
+            "interval": interval,
+            "limit": limit
+        },
+        timeout=10,
+        headers={
+            "User-Agent": "Mozilla/5.0"
+        }
+    )
+    r.raise_for_status()
+    return r.json()
 
-    for tentativa in range(1, RETRIES + 1):
-        try:
-            r = requests.get(API_URL, params=params, timeout=TIMEOUT)
-            r.raise_for_status()
-            data = r.json()
 
-            if "data" not in data:
-                raise ValueError("Resposta inválida da MEXC")
-
-            return data["data"]
-
-        except Exception as e:
-            log(f"[WARN] MEXC tentativa {tentativa}/{RETRIES} falhou: {e}")
-            time.sleep(5)
-
-    log("[ERRO LOOP] MEXC indisponível após múltiplas tentativas")
-    return None
-
-# =========================
-# CÁLCULO BOLLINGER
-# =========================
-def bollinger_bands(closes, period=20, mult=2):
-    if len(closes) < period:
-        return None, None
-
-    slice_ = closes[-period:]
-    ma = sum(slice_) / period
-    variance = sum((x - ma) ** 2 for x in slice_) / period
-    std = variance ** 0.5
-
-    upper = ma + mult * std
-    lower = ma - mult * std
-
+def bollinger(closes):
+    arr = np.array(closes)
+    sma = arr[-BOLL_PERIOD:].mean()
+    std = arr[-BOLL_PERIOD:].std()
+    upper = sma + BOLL_STD * std
+    lower = sma - BOLL_STD * std
     return upper, lower
 
-# =========================
-# MAIN LOOP
-# =========================
-init_statistics()
-def main():
-    log(f"🚀 Bot Bollinger 1min {SYMBOL} iniciado (Railway)")
-    init_statistics()
-
-    last_candle_time = None
-
-    while True:
-        try:
-            klines = fetch_klines()
-            if not klines:
-                time.sleep(SLEEP_LOOP)
-                continue
-
-            closes = [float(k[4]) for k in klines]
-            last_kline = klines[-1]
-            candle_time = int(last_kline[0])
-
-            # evita processar o mesmo candle
-            if candle_time == last_candle_time:
-                time.sleep(5)
-                continue
-
-            last_candle_time = candle_time
-            price = closes[-1]
-
-            upper, lower = bollinger_bands(closes)
-            if not upper or not lower:
-                time.sleep(SLEEP_LOOP)
-                continue
-
-            log(f"Preço: {price:.8f} | Upper: {upper:.8f} | Lower: {lower:.8f}")
-
-            # =========================
-            # SINAIS
-            # =========================
-            if price <= lower:
-                log("📈 SINAL LONG detectado")
-                registrar_entrada(
-                    symbol=SYMBOL,
-                    signal="LONG",
-                    price=price
-                )
-
-            elif price >= upper:
-                log("📉 SINAL SHORT detectado")
-                registrar_entrada(
-                    symbol=SYMBOL,
-                    signal="SHORT",
-                    price=price
-                )
-
-            # =========================
-            # VERIFICA RESULTADOS
-            # =========================
-            verificar_resultados(price)
-            enviar_resumo_12h()
-
-        except Exception as e:
-            log(f"[ERRO GERAL LOOP] {e}")
-
-        time.sleep(SLEEP_LOOP)
 
 # =========================
-# START
+# INIT
 # =========================
-if __name__ == "__main__":
-    main()
+
+ensure_log_files()
+print("🚀 Bot Bollinger ARPAUSDT iniciado (local)")
+send_telegram("🚀 Bot Bollinger ARPAUSDT iniciado (local)")
+
+
+# =========================
+# LOOP PRINCIPAL
+# =========================
+while True:
+    try:
+        klines = get_klines(SYMBOL, INTERVAL)
+        closes = [float(k[4]) for k in klines]
+        price = closes[-1]
+
+        upper, lower = bollinger(closes)
+        verificar_sinais(closes)
+
+        ts = agora_sp_str()
+        print(f"{ts} | Preço: {price:.8f} | Upper: {upper:.8f} | Lower: {lower:.8f}")
+
+        # ===== SHORT =====
+        if price > upper:
+            pct = (price - upper) / upper * 100
+            label = "SHORT STRONG local" if pct >= 0.2 else "SHORT local"
+
+            if label != last_signal:
+                try:
+                    send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
+                except Exception as e:
+                    print("[Aviso Telegram]", e)
+
+                write_signal_log(ts, SYMBOL, label, price, pct, "upper")
+                registrar_sinal("SHORT local", price, closes)
+                last_signal = label
+
+        # ===== LONG =====
+        elif price < lower:
+            pct = (lower - price) / lower * 100
+            label = "LONG STRONG local" if pct >= 0.2 else "LONG local"
+
+            if label != last_signal:
+                try:
+                    send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
+                except Exception as e:
+                    print("[Aviso Telegram]", e)
+
+                write_signal_log(ts, SYMBOL, label, price, pct, "lower")
+                registrar_sinal("LONG local", price, closes)
+                last_signal = label
+
+        # ===== ESTATÍSTICAS =====
+        if estat["total"] > 0:
+            print(
+                f"Total: {estat['total']} | "
+                f"Acertos 3c: {estat['acertos_3']} | "
+                f"Acertos 4c: {estat['acertos_4']}"
+            )
+
+    except Exception as e:
+        print("[ERRO]", e)
+
+    time.sleep(LOOP_SLEEP)

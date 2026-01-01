@@ -2,7 +2,28 @@
 import os
 import requests
 
+# ======================================================
+# CARREGAMENTO OPCIONAL DO .env (APENAS LOCAL)
+# ======================================================
+try:
+    from dotenv import load_dotenv
 
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    ENV_PATH = os.path.join(BASE_DIR, ".env")
+
+    if os.path.exists(ENV_PATH):
+        load_dotenv(ENV_PATH)
+        print("[ENV] .env carregado com sucesso (local)")
+    else:
+        print("[ENV] .env não encontrado (provável Railway)")
+
+except Exception as e:
+    print("[ENV] dotenv não disponível:", e)
+
+
+# ======================================================
+# OBTENÇÃO DAS VARIÁVEIS
+# ======================================================
 def _get_env():
     token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -14,6 +35,9 @@ def _get_env():
     return token, chat_id
 
 
+# ======================================================
+# TELEGRAM
+# ======================================================
 def send_telegram(msg: str):
     print("[DEBUG] Preparando envio Telegram")
 
