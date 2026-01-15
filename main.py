@@ -63,7 +63,7 @@ def bollinger(closes):
 # =========================
 
 ensure_log_files()
-print("🚀 Bot Bollinger ARPAUSDT iniciado")
+print("🚀 Bot Bollinger ARPAUSDT 15m iniciado")
 send_telegram("🚀 Bot Bollinger ARPAUSDT iniciado")
 
 
