@@ -20,7 +20,7 @@ from security import send_telegram
 # CONFIGURAÇÕES
 # =========================
 SYMBOL = "ARPAUSDT"
-INTERVAL = "1m"
+INTERVAL = "15m"
 
 BOLL_PERIOD = 8
 BOLL_STD = 2
