@@ -1,4 +1,4 @@
-﻿# versão estável git 998e572 mais
+# versão estável git 998e572 mais
 # ajuste tirando statistics
 # mudanca da moeda para ENAUSDT
 
