@@ -1,7 +1,6 @@
-﻿﻿# main
-# versão estável git 998e572
+﻿# versão estável git 998e572 mais
 # ajuste tirando statistics
-# colocar no ambiente production
+# mudanca da moeda para ENAUSDT
 
 import time
 import requests
