@@ -1,20 +1,13 @@
-﻿# main.py
+﻿﻿# main.py
 # versão estável git 998e572
+# ajuste tirando statistics
+# colocar no ambiente production
+
 import time
 import requests
 import numpy as np
 
-from statistics import (
-    ensure_log_files,
-    registrar_sinal,
-    verificar_sinais,
-    write_signal_log,
-    estat,
-    agora_sp_str
-)
-
 from security import send_telegram
-
 
 # =========================
 # CONFIGURAÇÕES
@@ -25,7 +18,7 @@ INTERVAL = "1m"
 BOLL_PERIOD = 8
 BOLL_STD = 2
 
-LOOP_SLEEP = 2
+LOOP_SLEEP = 30
 last_signal = None
 
 # =========================
@@ -80,8 +73,8 @@ while True:
         verificar_sinais(closes)
 
         ts = agora_sp_str()
-        print(f"{ts} | Preço: {price:.8f} | Upper: {upper:.8f} | Lower: {lower:.8f}")
-
+        print(f"{ts} | SYMBOL: {SYMBOL} | Preço: {price:.8f} | Upper: {upper:.8f} | Lower: {lower:.8f}")
+        send_telegram(f"{ts} | SYMBOL: {SYMBOL} | Preço: {price:.8f} | Upper: {upper:.8f} | Lower: {lower:.8f}")
         # ===== SHORT =====
         if price > upper:
             pct = (price - upper) / upper * 100
@@ -112,13 +105,6 @@ while True:
                 registrar_sinal("LONG", price, closes)
                 last_signal = label
 
-        # ===== ESTATÍSTICAS =====
-        if estat["total"] > 0:
-            print(
-                f"Total: {estat['total']} | "
-                f"Acertos 3c: {estat['acertos_3']} | "
-                f"Acertos 4c: {estat['acertos_4']}"
-            )
 
     except Exception as e:
         print("[ERRO]", e)
