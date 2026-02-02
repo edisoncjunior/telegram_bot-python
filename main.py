@@ -1,4 +1,4 @@
-﻿﻿# main.py
+﻿﻿# main
 # versão estável git 998e572
 # ajuste tirando statistics
 # colocar no ambiente production
@@ -12,7 +12,7 @@ from security import send_telegram
 # =========================
 # CONFIGURAÇÕES
 # =========================
-SYMBOL = "ARPAUSDT"
+SYMBOL = "ENAUSDT"
 INTERVAL = "1m"
 
 BOLL_PERIOD = 8
@@ -56,8 +56,8 @@ def bollinger(closes):
 # =========================
 
 ensure_log_files()
-print("🚀 Bot Bollinger ARPAUSDT iniciado")
-send_telegram("🚀 Bot Bollinger ARPAUSDT iniciado")
+print("🚀 Bot Bollinger ENAUSDT iniciado")
+send_telegram("🚀 Bot Bollinger ENAUSDT iniciado")
 
 
 # =========================
@@ -82,7 +82,7 @@ while True:
 
             if label != last_signal:
                 try:
-                    send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
+                    send_telegram(f"{label} ENAUSDT\nPreço: {price:.8f}")
                 except Exception as e:
                     print("[Aviso Telegram]", e)
 
@@ -97,7 +97,7 @@ while True:
 
             if label != last_signal:
                 try:
-                    send_telegram(f"{label} ARPAUSDT\nPreço: {price:.8f}")
+                    send_telegram(f"{label} ENAUSDT\nPreço: {price:.8f}")
                 except Exception as e:
                     print("[Aviso Telegram]", e)
 
